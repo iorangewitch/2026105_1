@@ -1,59 +1,443 @@
-<div>Teachable Machine Image Model</div>
-<button type="button" onclick="init()">Start</button>
-<div id="webcam-container"></div>
-<div id="label-container"></div>
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
-<script type="text/javascript">
-    // More API functions here:
-    // https://github.com/googlecreativelab/teachablemachine-community/tree/master/libraries/image
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Teachable Machine • Live Classifier</title>
+  <meta name="color-scheme" content="light" />
+  <style>
+    :root{
+      /* Theme tokens (background changes by JS) */
+      --bg: radial-gradient(900px 600px at 20% 20%, rgba(255,255,255,.18), transparent 55%),
+            radial-gradient(800px 600px at 80% 25%, rgba(255,255,255,.14), transparent 60%),
+            linear-gradient(135deg, #4f46e5, #0ea5e9 55%, #22c55e);
+      --card: rgba(255,255,255,.12);
+      --card2: rgba(255,255,255,.08);
+      --stroke: rgba(255,255,255,.22);
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.72);
+      --shadow: 0 22px 70px rgba(0,0,0,.35);
+      --radius: 22px;
 
-    // the link to your model provided by Teachable Machine export panel
-    const URL = "./my_model/";
+      --purple: radial-gradient(900px 600px at 20% 20%, rgba(255,255,255,.14), transparent 55%),
+                linear-gradient(135deg, #5b21b6, #7c3aed 50%, #a78bfa);
+      --beige: radial-gradient(900px 600px at 20% 20%, rgba(255,255,255,.30), transparent 55%),
+               linear-gradient(135deg, #f6e7cf, #efe1cc 55%, #e9d6bd);
 
-    let model, webcam, labelContainer, maxPredictions;
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+              "Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic", Arial, sans-serif;
+    }
 
-    // Load the image model and setup the webcam
-    async function init() {
-        const modelURL = URL + "model.json";
-        const metadataURL = URL + "metadata.json";
+    *{ box-sizing:border-box; }
+    html, body{ height:100%; }
+    body{
+      margin:0;
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg);
+      transition: background .35s ease;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 24px;
+      overflow-x:hidden;
+    }
 
-        // load the model and metadata
-        // Refer to tmImage.loadFromFiles() in the API to support files from a file picker
-        // or files from your local hard drive
-        // Note: the pose library adds "tmImage" object to your window (window.tmImage)
+    .wrap{ width:min(980px, 100%); }
+    .card{
+      background: linear-gradient(180deg, var(--card), var(--card2));
+      border: 1px solid var(--stroke);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      padding: 18px;
+    }
+
+    header{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    h1{
+      margin:0;
+      font-size: clamp(18px, 2.2vw, 24px);
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+    .sub{ margin:6px 0 0; color: var(--muted); font-size: 13px; }
+
+    .pill{
+      flex: 0 0 auto;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.08);
+      color: var(--muted);
+      font-size: 12px;
+      display:flex;
+      gap: 8px;
+      align-items:center;
+      user-select:none;
+      white-space:nowrap;
+    }
+    .dot{
+      width:8px;height:8px;border-radius:50%;
+      background: rgba(255,255,255,.7);
+      box-shadow: 0 0 0 4px rgba(255,255,255,.10);
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 360px 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 880px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+
+    .panel{
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(0,0,0,.12);
+      border-radius: 18px;
+      padding: 14px;
+    }
+
+    .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .btn{
+      border: 1px solid rgba(255,255,255,.28);
+      background: rgba(255,255,255,.14);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 14px;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      cursor: pointer;
+      transition: transform .15s ease, background .15s ease, opacity .15s ease;
+      box-shadow: 0 10px 24px rgba(0,0,0,.18);
+    }
+    .btn:hover{ transform: translateY(-1px); background: rgba(255,255,255,.18); }
+    .btn:active{ transform: translateY(0px); }
+    .btn:disabled{ opacity:.55; cursor:not-allowed; }
+
+    .status{
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(0,0,0,.10);
+      color: rgba(255,255,255,.82);
+      font-size: 12.5px;
+      line-height: 1.35;
+      white-space: pre-wrap;
+    }
+
+    #webcam-container{
+      display:flex;
+      justify-content:center;
+    }
+    #webcam-container canvas{
+      width: 320px; height: 320px;
+      max-width: 100%;
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,.18);
+      background: rgba(0,0,0,.14);
+    }
+
+    .pred-header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .pred-title{ margin:0; font-size: 14px; color: rgba(255,255,255,.90); }
+    .theme-name{ font-size: 12px; color: var(--muted); }
+
+    .pred-list{ display:flex; flex-direction:column; gap: 10px; margin-top: 6px; }
+    .pred{
+      display:grid;
+      grid-template-columns: 1fr 60px;
+      gap: 10px;
+      align-items:center;
+      padding: 10px 10px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.16);
+      background: rgba(0,0,0,.10);
+    }
+    .pred .name{
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+      font-size: 13px;
+      color: rgba(255,255,255,.88);
+      margin-bottom: 6px;
+    }
+    .bar{
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.12);
+      overflow:hidden;
+    }
+    .bar > i{
+      display:block;
+      height: 100%;
+      width: 0%;
+      background: rgba(255,255,255,.75);
+      transition: width .18s ease;
+    }
+    .pct{
+      text-align:right;
+      font-variant-numeric: tabular-nums;
+      color: rgba(255,255,255,.85);
+      font-size: 12.5px;
+    }
+
+    .hint{
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    @media (prefers-reduced-motion: reduce){
+      *{ transition:none !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <header>
+        <div>
+          <h1>Teachable Machine • Live Image Classifier</h1>
+          <p class="sub">Start → 모델 로딩 → 웹캠 실행 → 실시간 분류</p>
+        </div>
+        <div class="pill" aria-label="model source">
+          <span class="dot" aria-hidden="true"></span>
+          <span id="pillText">MODEL: ./my_model/</span>
+        </div>
+      </header>
+
+      <div class="grid">
+        <!-- Left: Webcam -->
+        <div class="panel">
+          <div class="row">
+            <button class="btn" id="startBtn" type="button">Start</button>
+            <button class="btn" id="stopBtn" type="button" disabled>Stop</button>
+          </div>
+          <div class="status" id="status">대기 중</div>
+          <div id="webcam-container" style="margin-top: 12px;"></div>
+          <div class="hint">
+            • GitHub Pages(https)에서 여셔야 웹캠 권한이 정상입니다.<br/>
+            • 404가 뜨면 <code>my_model/model.json</code> 경로/업로드/대소문자를 확인하세요.
+          </div>
+        </div>
+
+        <!-- Right: Predictions -->
+        <div class="panel">
+          <div class="pred-header">
+            <p class="pred-title">Predictions</p>
+            <span class="theme-name" id="themeName">Theme: Default</span>
+          </div>
+          <div id="predictions" class="pred-list"></div>
+          <div class="hint">
+            배경 변경 규칙<br/>
+            • 콤팩트 확률 &gt; 0.50 → 보라<br/>
+            • 핸드크림 확률 &gt; 0.50 → 베이지<br/>
+            • 둘 다 넘으면 더 높은 확률 우선
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+  <script>
+    /**
+     * 1) 모델 폴더를 직접 호스팅(GitHub Pages)하는 경우:
+     *    /my_model/model.json, metadata.json, weights.bin 이 있어야 합니다.
+     */
+    const MODEL_BASE_URL = "./my_model/";
+
+    /**
+     * 2) 클래스 이름이 모델마다 다를 수 있어, 후보 이름을 여러 개로 둡니다.
+     *    - Teachable Machine에서 클래스명을 정확히 맞추면 가장 좋습니다.
+     */
+    const CLASS_ALIASES = {
+      compact: ["콤팩트", "compact", "Compact", "COMPACT"],
+      handcream: ["핸드크림", "hand cream", "handcream", "HandCream", "HANDCREAM"]
+    };
+
+    const THRESHOLD = 0.50;
+
+    let model, webcam, maxPredictions;
+    let running = false;
+
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn  = document.getElementById("stopBtn");
+    const statusEl = document.getElementById("status");
+    const predsEl  = document.getElementById("predictions");
+    const themeNameEl = document.getElementById("themeName");
+    document.getElementById("pillText").textContent = `MODEL: ${MODEL_BASE_URL}`;
+
+    function setStatus(msg){
+      statusEl.textContent = msg;
+      console.log(msg);
+    }
+
+    function setThemeDefault(){
+      document.body.style.background = getComputedStyle(document.documentElement).getPropertyValue("--bg");
+      themeNameEl.textContent = "Theme: Default";
+    }
+    function setThemePurple(){
+      document.body.style.background = getComputedStyle(document.documentElement).getPropertyValue("--purple");
+      themeNameEl.textContent = "Theme: Purple (콤팩트)";
+    }
+    function setThemeBeige(){
+      document.body.style.background = getComputedStyle(document.documentElement).getPropertyValue("--beige");
+      themeNameEl.textContent = "Theme: Beige (핸드크림)";
+    }
+
+    function toPct(x){ return (x * 100).toFixed(0) + "%"; }
+
+    function findProb(predictions, aliases){
+      for(const p of predictions){
+        if(aliases.includes(p.className)) return p.probability;
+      }
+      return null;
+    }
+
+    function ensurePredictionUI(n){
+      predsEl.innerHTML = "";
+      for(let i=0; i<n; i++){
+        const wrap = document.createElement("div");
+        wrap.className = "pred";
+        wrap.innerHTML = `
+          <div>
+            <div class="name" id="name-${i}">-</div>
+            <div class="bar"><i id="bar-${i}"></i></div>
+          </div>
+          <div class="pct" id="pct-${i}">0%</div>
+        `;
+        predsEl.appendChild(wrap);
+      }
+    }
+
+    async function init(){
+      if(running) return;
+      running = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+
+      try{
+        setStatus("모델 로딩 중...");
+
+        const modelURL = MODEL_BASE_URL + "model.json";
+        const metadataURL = MODEL_BASE_URL + "metadata.json";
+
+        // 모델 로딩
         model = await tmImage.load(modelURL, metadataURL);
         maxPredictions = model.getTotalClasses();
+        ensurePredictionUI(maxPredictions);
 
-        // Convenience function to setup a webcam
-        const flip = true; // whether to flip the webcam
-        webcam = new tmImage.Webcam(200, 200, flip); // width, height, flip
-        await webcam.setup(); // request access to the webcam
+        setStatus("웹캠 권한 요청 중... (팝업 허용)");
+
+        // 웹캠 준비
+        const flip = true;
+        webcam = new tmImage.Webcam(320, 320, flip);
+        await webcam.setup();     // 권한 요청
         await webcam.play();
-        window.requestAnimationFrame(loop);
 
-        // append elements to the DOM
+        document.getElementById("webcam-container").innerHTML = "";
         document.getElementById("webcam-container").appendChild(webcam.canvas);
-        labelContainer = document.getElementById("label-container");
-        for (let i = 0; i < maxPredictions; i++) { // and class labels
-            labelContainer.appendChild(document.createElement("div"));
-        }
-    }
 
-    async function loop() {
-        webcam.update(); // update the webcam frame
-        await predict();
+        setStatus("실행 중: 실시간 분류 시작");
         window.requestAnimationFrame(loop);
+
+      } catch(err){
+        console.error(err);
+        setStatus(
+          "오류 발생:\n" +
+          (err?.message || err) +
+          "\n\n체크:\n" +
+          "1) GitHub Pages(https)에서 열었는지\n" +
+          "2) my_model/model.json, metadata.json, weights.bin 업로드/경로/대소문자\n"
+        );
+        running = false;
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
     }
 
-    // run the webcam image through the image model
-    async function predict() {
-        // predict can take in an image, video or canvas html element
-        const prediction = await model.predict(webcam.canvas);
-        for (let i = 0; i < maxPredictions; i++) {
-            const classPrediction =
-                prediction[i].className + ": " + prediction[i].probability.toFixed(2);
-            labelContainer.childNodes[i].innerHTML = classPrediction;
-        }
+    async function loop(){
+      if(!running) return;
+      webcam.update();
+      await predict();
+      window.requestAnimationFrame(loop);
     }
-</script>
+
+    async function predict(){
+      const predictions = await model.predict(webcam.canvas);
+
+      // UI 업데이트
+      for(let i=0; i<maxPredictions; i++){
+        const p = predictions[i];
+        const nameEl = document.getElementById(`name-${i}`);
+        const barEl  = document.getElementById(`bar-${i}`);
+        const pctEl  = document.getElementById(`pct-${i}`);
+
+        nameEl.textContent = p.className;
+        barEl.style.width = toPct(p.probability);
+        pctEl.textContent = (p.probability * 100).toFixed(0) + "%";
+      }
+
+      // 배경 변경 로직
+      const compactProb  = findProb(predictions, CLASS_ALIASES.compact);
+      const handProb     = findProb(predictions, CLASS_ALIASES.handcream);
+
+      // 규칙: 둘 다 임계치 넘으면 더 높은 확률 우선
+      const compactHit = (compactProb !== null && compactProb > THRESHOLD);
+      const handHit    = (handProb !== null && handProb > THRESHOLD);
+
+      if(compactHit && handHit){
+        if(compactProb >= handProb) setThemePurple();
+        else setThemeBeige();
+      } else if(compactHit){
+        setThemePurple();
+      } else if(handHit){
+        setThemeBeige();
+      } else {
+        setThemeDefault();
+      }
+    }
+
+    function stop(){
+      if(!running) return;
+      running = false;
+
+      try{
+        if(webcam){
+          webcam.stop();
+        }
+      } catch(e){
+        console.warn(e);
+      }
+
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      setStatus("중지됨");
+      setThemeDefault();
+    }
+
+    startBtn.addEventListener("click", init);
+    stopBtn.addEventListener("click", stop);
+
+    // 초기 기본 배경
+    setThemeDefault();
+  </script>
+</body>
+</html>
